@@ -1,6 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
 const Firebird = require('node-firebird');
-const Fuse = require("fuse.js/dist/fuse"); 
+const Fuse = require('fuse.js');
 const dbConfig = require('./dbConfig');
 
 const token = dbConfig.token;
