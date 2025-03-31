@@ -4,7 +4,15 @@ const Fuse = require('fuse.js');
 const dbConfig = require('./dbConfig');
 
 const token = dbConfig.token;
-const bot = new TelegramBot(token, { polling: true });
+const bot = new TelegramBot(token, {
+    polling: {
+        interval: 300,
+        autoStart: true,
+        params: {
+            allowed_updates: ['message', 'edited_message', 'channel_post', 'edited_channel_post']
+        }
+    }
+});
 
 let clientList = [];
 let fuseClientes;
@@ -23,7 +31,7 @@ Firebird.attach(dbConfig.firebird, async (err, firebirdClient) => {
 
     bot.on('message', async (msg) => {
         const chatId = msg.chat.id;
-        const messageText = msg.text;
+        const messageText = msg.text || '' ;
 
         if (messageText.toLowerCase() === 'resum') {
             const resumen = await getResumenPedidos(firebirdClient);
@@ -206,28 +214,11 @@ Firebird.attach(dbConfig.firebird, async (err, firebirdClient) => {
             return { error: "Formato de mensaje incorrecto." };
         }
     
-        const cliente = lines[0].toLowerCase().trim();  // La primera línea es el cliente
-        let diaInput = lines[1].trim();  // El día está en la segunda línea, si es un número
-        const today = new Date();
-        const mes = today.getMonth() + 1;
-        const año = today.getFullYear();
-    
-        // Verificar si la segunda línea es un día (es un número único y menor a 32)
-        let diaPedido;
-        const isDiaValido = !isNaN(diaInput) && diaInput.length <= 2 && parseInt(diaInput, 10) <= 31;
-    
-        if (isDiaValido) {
-            // Si la segunda línea es un día, asignamos la fecha
-            diaPedido = `${año}-${String(mes).padStart(2, '0')}-${String(diaInput).padStart(2, '0')}`;
-            // El primer artículo comienza desde la tercera línea
-            diaInput = String(diaInput);
-            var i = 2;
-        } else {
-            // Si la segunda línea no es un día, asignamos la fecha del día siguiente
-            today.setDate(today.getDate() + 1);  // Incrementamos un día
-            diaPedido = `${año}-${String(mes).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-            var i = 1;  // Comenzamos desde la segunda línea para leer los artículos
-        }
+        const cliente = lines[0].toLowerCase().trim();  
+        let diaInput = lines[1].trim();  
+       
+        let diaPedido = obtenerFechaPedido(diaInput);
+        let i = (!isNaN(diaInput) && diaInput.length <= 2) ? 2 : 1;
     
         const articulos = [];
         while (i < lines.length) {
@@ -248,21 +239,57 @@ Firebird.attach(dbConfig.firebird, async (err, firebirdClient) => {
     
                 articulos.push({
                     cantidad: cantidad,
-                    unidad: unidad, // Agregamos la unidad (si está presente)
+                    unidad: unidad,
                     descripcion: descripcion,
-                    anotacion: anotacion || ''  // Si no hay anotación, dejamos cadena vacía
+                    anotacion: anotacion || ''
                 });
             } else {
                 console.log(`Línea no coincide con el patrón: ${line}`);
-                break; // Si no encontramos un patrón válido, terminamos el loop
+                break;
             }
             i++;
         }
     
-        console.log(articulos);  // Para comprobar que los artículos y anotaciones se procesan bien
+        console.log(articulos); 
     
         return { cliente, diaPedido, articulos };
-    }      
+    }   
+    
+    function obtenerFechaPedido(diaInput) {
+        const today = new Date();
+        let diaActual = today.getDate();
+        let mes = today.getMonth() + 1; // Mes actual (1-12)
+        let año = today.getFullYear();
+    
+        let dia;
+    
+        // Verificar si la entrada es un día válido (número entre 1 y 31)
+        const isDiaValido = !isNaN(diaInput) && diaInput.length <= 2 && parseInt(diaInput, 10) >= 1 && parseInt(diaInput, 10) <= 31;
+    
+        if (isDiaValido) {
+            dia = parseInt(diaInput, 10);
+            if (dia < diaActual) {
+                mes += 1;
+                if (mes > 12) {
+                    mes = 1;
+                    año += 1;
+                }
+            }
+        } else {
+            today.setDate(today.getDate() + 1);
+            dia = today.getDate();
+            mes = today.getMonth() + 1;
+            año = today.getFullYear();
+        }
+    
+        // Asegurar que el día es válido en el mes y año seleccionados
+        let ultimoDiaMes = new Date(año, mes, 0).getDate();
+        if (dia > ultimoDiaMes) {
+            dia = ultimoDiaMes;
+        }
+    
+        return `${año}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+    }
 
     // Función para insertar en la base de datos Firebird
     async function insertMessageToDatabase(client, codigoCliente, articleCodes, diaPedido) {
