@@ -61,7 +61,6 @@ Firebird.attach(dbConfig.firebird, async (err, firebirdClient) => {
         }
     });
 
-    // Consulta para obtener el resumen de pedidos
     async function getResumenPedidos(client) {
         const query = `
             SELECT
@@ -162,7 +161,7 @@ Firebird.attach(dbConfig.firebird, async (err, firebirdClient) => {
                 
                 fuseArticles = new Fuse(articleList, {
                     keys: ['nombre_idioma_1'],
-                    threshold: 0.3, // Ajuste para mejorar coincidencias
+                    threshold: 0.3,
                     caseSensitive: false,
                     ignoreLocation: true,
                     minMatchCharLength: 2
@@ -180,8 +179,8 @@ Firebird.attach(dbConfig.firebird, async (err, firebirdClient) => {
             const bestMatch = searchBestArticleMatch(articulo.descripcion);
             if (bestMatch) {
                 articleDetails.push({
-                    cantidad: articulo.cantidad, // 💡 Mantener la cantidad
-                    codigo: bestMatch.codigo, // 💡 Obtener el código correcto
+                    cantidad: articulo.cantidad,
+                    codigo: bestMatch.codigo,
                     descripcion: bestMatch.nombre_idioma_1 + "       " + articulo.anotacion,
                 });
                 console.log(`✅ Artículo encontrado: ${articulo.descripcion} -> Código: ${bestMatch.codigo}`);
@@ -224,17 +223,14 @@ Firebird.attach(dbConfig.firebird, async (err, firebirdClient) => {
         while (i < lines.length) {
             const line = lines[i];
     
-            // Expresión regular para extraer cantidad, unidad (opcional) y la descripción
             const match = line.match(/^(\d+)(\s*[a-zA-Z]{1,3})?,\s*(.+)$/);
             if (match) {
-                const cantidad = parseInt(match[1], 10); // Captura la cantidad
-                const unidad = match[2] ? match[2].trim() : ''; // Captura la unidad (si está presente)
-                let descripcion = match[3].trim(); // Captura la descripción completa
+                const cantidad = parseInt(match[1], 10);
+                const unidad = match[2] ? match[2].trim() : '';
+                let descripcion = match[3].trim();
     
-                // Si hay un punto, extraemos todo después de él como anotación
                 const anotacion = descripcion.includes('.') ? descripcion.split('.').slice(1).join('.').trim() : null;
     
-                // Limpiamos la descripción para que no incluya la anotación
                 descripcion = descripcion.split('.')[0].trim();
     
                 articulos.push({
@@ -258,12 +254,11 @@ Firebird.attach(dbConfig.firebird, async (err, firebirdClient) => {
     function obtenerFechaPedido(diaInput) {
         const today = new Date();
         let diaActual = today.getDate();
-        let mes = today.getMonth() + 1; // Mes actual (1-12)
+        let mes = today.getMonth() + 1; 
         let año = today.getFullYear();
     
         let dia;
     
-        // Verificar si la entrada es un día válido (número entre 1 y 31)
         const isDiaValido = !isNaN(diaInput) && diaInput.length <= 2 && parseInt(diaInput, 10) >= 1 && parseInt(diaInput, 10) <= 31;
     
         if (isDiaValido) {
@@ -282,7 +277,6 @@ Firebird.attach(dbConfig.firebird, async (err, firebirdClient) => {
             año = today.getFullYear();
         }
     
-        // Asegurar que el día es válido en el mes y año seleccionados
         let ultimoDiaMes = new Date(año, mes, 0).getDate();
         if (dia > ultimoDiaMes) {
             dia = ultimoDiaMes;
@@ -291,19 +285,15 @@ Firebird.attach(dbConfig.firebird, async (err, firebirdClient) => {
         return `${año}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
     }
 
-    // Función para insertar en la base de datos Firebird
     async function insertMessageToDatabase(client, codigoCliente, articleCodes, diaPedido) {
         try {
-            // 1. Obtener el último ID de pedido insertado
             const lastIdPedido = await getLastId(client, "SELECT MAX(ID) AS last_id FROM tbl_pedidos_venta_cab WHERE COD_EMPRESA = 100");
             let idPedido = lastIdPedido + 1;
-            let numLinea = 1;  // Inicializamos numLinea para este pedido
+            let numLinea = 1;  
     
-            // 2. Obtener el último ID de la línea de pedido
             const lastIdLinea = await getLastId(client, "SELECT MAX(ID) AS last_id_linea FROM tbl_pedidos_venta_lin WHERE COD_EMPRESA = 100");
-            let idLinea = lastIdLinea + 1;  // Incrementamos el último id de línea por 1
+            let idLinea = lastIdLinea + 1; 
     
-            // 3. Insertar cabecera del pedido
             await runQuery(client, `
                 INSERT INTO TBL_PEDIDOS_VENTA_CAB (ID, COD_EMPRESA, COD_SERIE, NUM_PEDIDO, ANYO, FECHA_PEDIDO, FECHA_ENTREGA, SERVIDO, BLOQUEADO, COD_CLIENTE, MATRICULA, KILOMETRAJE, HORAS_FUNCIONAMIENTO, NUM_PEDIDO_CLIENTE, NUM_BULTOS, PRONTO_PAGO, DTO, PORTES, IVA_PORTES, RE_PORTES, IVA_LINEAL, GASTOS_FINANCIEROS, APLICAR_GASTOS_FIN, IRPF, REGIMEN_IRPF, APLICAR_RE, COD_TARIFA, COD_ALMACEN, COD_CANAL, COD_FORMA_PAGO, COD_REPRESENTANTE, COD_TRANSPORTISTA, COD_RUTA, COD_DIVISA, DG_COD_BANCO, DG_OFICINA, DG_DC, DG_NUM_CUENTA, DG_IBAN, DG_BIC, DE_DIRECCION, DE_COD_POBLACION, DF_DIRECCION, DF_COD_POBLACION, CC_NOMBRE, CC_NIF, CC_DIRECCION, CC_COD_POBLACION, APLICAR_FIANZA, FIANZA, IMPORTE_FIANZA, COD_EJERCICIO, COD_CUENTA_FIANZA, IMPRIMIR_COD_ARTICULO, IMPRIMIR_TOTAL_SECCION, IMPRIMIR_PRECIOS, IMPRIMIR_VALORACION, FECHA_CREACION, HORA_CREACION, USUARIO_CREACION, FECHA_MODIFICACION, HORA_MODIFICACION, USUARIO_MODIFICACION, COD_CENTRO_COSTE, DNI_FIRMANTE, COD_OBRA)
                 VALUES ((SELECT MAX(ID) + 1 FROM TBL_PEDIDOS_VENTA_CAB), 100, 'VE', (SELECT MAX(NUM_PEDIDO) + 1 FROM TBL_PEDIDOS_VENTA_CAB), ?, ?, '2025-01-09', 0, 0, ?, NULL, NULL, NULL, NULL, 0, 0, 0, 0, 0, 0, NULL, 0, 'T', 0, 'N', 0, 1, 'AG', NULL, 'G30', 2, NULL, '0', 'EURO', '2100', '9155', '59', '0200053195', 'ES9721009155590200053195', 'CAIXESBBXXX', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, 0, NULL, NULL, 1, 1, 1, 1, ?, '22:55:00', 'JOSEP', NULL, NULL, NULL, NULL, NULL, NULL);
@@ -311,7 +301,6 @@ Firebird.attach(dbConfig.firebird, async (err, firebirdClient) => {
     
             console.log('✅ Cabecera guardada con ID:', idPedido);
     
-            // 4. Insertar líneas del pedido
             for (const articulo of articleCodes) {
                 await runQuery(client, `
                     INSERT INTO TBL_PEDIDOS_VENTA_LIN (ID, ID_PEDIDO, NUM_LINEA, COD_EMPRESA, COD_ARTICULO, DESCRIPCION, COD_SECCION, COD_SUB_SECCION, COD_AGRUPACION, COD_MARCA, IVA_INCLUIDO, IVA, RE, DTO, PRECIO_COMPRA, PRECIO_VENTA, PRECIO_VENTA_SIN_IVA, PRECIO_VENTA_CON_IVA, CANTIDAD_PEDIDA, CANTIDAD_SERVIDA, COMISION, NOTAS, ESTILO_CURSIVA, ESTILO_NEGRITA, ESTILO_SUBRAYADO, FECHA_CREACION, HORA_CREACION, USUARIO_CREACION, FECHA_MODIFICACION, HORA_MODIFICACION, USUARIO_MODIFICACION, I1, I2, I3, I4, N1, N2, N3, N4, A1, A5, A10, A30, L1, L2, D1)
@@ -319,8 +308,8 @@ Firebird.attach(dbConfig.firebird, async (err, firebirdClient) => {
                 `, [numLinea, articulo.codigo, articulo.descripcion, articulo.cantidad]);
     
                 console.log('✅ Línea de pedido guardada con ID:', idLinea);
-                idLinea++; // Incrementamos el ID de línea
-                numLinea++; // Incrementamos el número de línea
+                idLinea++;
+                numLinea++;
             }
     
         } catch (error) {
@@ -328,7 +317,6 @@ Firebird.attach(dbConfig.firebird, async (err, firebirdClient) => {
         }
     }
     
-    // **Funciones auxiliares para consultas asíncronas**
     function getLastId(client, query) {
         return new Promise((resolve, reject) => {
             client.query(query, (err, result) => {
@@ -353,7 +341,6 @@ Firebird.attach(dbConfig.firebird, async (err, firebirdClient) => {
         });
     }    
 
-    // Cerrar conexión al salir
     process.on('SIGINT', () => {
         console.log('🛑 Cerrando conexión con Firebird...');
         firebirdClient.detach();
